@@ -29,4 +29,4 @@ The project comprises the following:
 
 The full detailed report, including theoretical foundations, data exploration, methodological implementations, and comprehensive results with all accompanying plots and tables, is available in HTML format.
 
-[**View Full Report (HTML)**](https://matteovantaggio.github.io/Nome-Del-Tuovo-Progetto-EVT/index.html)
+[**View Full Report (HTML)**](https://matteovantaggio.github.io/Extreme_Value_Theory_Application/)

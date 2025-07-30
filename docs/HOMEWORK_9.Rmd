@@ -1,0 +1,557 @@
+---
+title: "HOMEWORK_9"
+author: "Matteo Vantaggio"
+date: "2024-10-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploratory Data Analysis
+
+```{r cars, include=FALSE}
+library(readxl)
+library(evd)
+library(evir)
+library(extRemes)
+library(lmomco)
+library(POT)
+library(ismev)
+library(stats)
+library(dplyr)
+library(lubridate)
+library(fitdistrplus)
+```
+The dataset comprises time series data from four distinct rainfall stations (T4219, T4220, T4237, and T438). Each record includes two columns: the date and the corresponding rainfall amount recorded on that day. The dataset contains a total of 7,304 observations, spanning 20 years of data collection from 1951 to 1970.
+```{r include=FALSE}
+setwd("C:/Users/matte/Documents/R")
+load("RaindataForExtreme.RData")
+# renaming the time series columns for simplicity
+ts1 <- T4219; colnames(ts1) <- c('date', 'r_amount')
+ts2 <- T4220; colnames(ts2) <- c('date', 'r_amount')
+ts3 <- T4237; colnames(ts3) <- c('date', 'r_amount')
+ts4 <- T4238; colnames(ts4) <- c('date', 'r_amount')
+```
+
+Each time series looks like this
+```{r echo=FALSE, warning=FALSE}
+head(ts1)
+```
+```{r}
+par(mfrow = c(2, 2))
+plot(ts1, main = "Station T4219")
+plot(ts2, main = "Station T4220")
+plot(ts3, main = "Station T4237")
+plot(ts4, main = "Station T4238")
+```
+In order to check for missing values, we sum and locate them as follows
+```{r}
+na_counts <- sapply(list(ts1, ts2, ts3, ts4), function(ts) sum(is.na(ts[, 2])))
+names(na_counts) <- c("ts1", "ts2", "ts3", "ts4")
+print(na_counts)
+```
+```{r}
+where <- sapply(list(ts1, ts2, ts3, ts4), function(ts) which(is.na(ts1[,2])))
+print(where)
+```
+As we can see, the three missing observation for each time series are the same, which means we can impute them in the same way.
+We are going to discuss three ways of imputing the missing values in the dataset, ultimately choosing only one. The proposed methods are discussed on the first time series only, just for simplicity. The choosen method is being applied to all four time series.
+The first way is by linear interpolation, and it gives us the following values
+```{r}
+missing_indices_ts1 <- which(is.na(ts1$r_amount))
+time_index <- as.numeric(as.Date(ts1$date))
+rainfall <- ts1$r_amount
+interpolated_values_ts1 <- approx(x = time_index, y = rainfall, xout = time_index)$y
+imputed_values_linear_ts1 <- interpolated_values_ts1[missing_indices_ts1]
+print(imputed_values_linear_ts1)
+```
+The second method is LOESS and its output is the following. Note that the function used "loess" needs the tuning of the parameter 'span' which accounts for the smoothness of the curve: a smaller span captures more local detail, while a larger span produces a smoother fit
+```{r}
+loess_fit_ts1 <- loess(r_amount ~ as.numeric(as.Date(date)), data = ts1, span = 0.1)
+imputed_values_loess_ts1 <- predict(loess_fit_ts1, newdata = ts1[missing_indices_ts1, ])
+print(imputed_values_loess_ts1)
+```
+The third approach is by computing a mean of a 30-days window in which the missing value is the middle observation.
+```{r}
+missing_indices_ts1_mean <- which(is.na(ts1$r_amount))
+window_size <- 15
+ts1$r_amount[missing_indices_ts1_mean[1]] <- mean(ts1$r_amount[(missing_indices_ts1_mean - window_size)[1]:(missing_indices_ts1_mean + window_size)[1]], na.rm = TRUE)
+ts1$r_amount[missing_indices_ts1_mean[2]] <- mean(ts1$r_amount[(missing_indices_ts1_mean - window_size)[2]:(missing_indices_ts1_mean + window_size)[2]], na.rm = TRUE)
+ts1$r_amount[missing_indices_ts1_mean[3]] <- mean(ts1$r_amount[(missing_indices_ts1_mean - window_size)[3]:(missing_indices_ts1_mean + window_size)[3]], na.rm = TRUE)
+ts1$r_amount[missing_indices_ts1_mean]
+```
+The last two methods seem to produce similar values, but the third one will be chosen since it does not rely on tuning the span parameter in the 'loess' function.
+Therefore, these are the imputed values for the remaining three rain stations
+```{r echo=FALSE}
+# We will use the third method since it's less depending on our own choice of the "span" parameter in the LOESS interpolation function.
+ts2$r_amount[missing_indices_ts1_mean[1]] <- mean(ts2$r_amount[(missing_indices_ts1_mean - window_size)[1]:(missing_indices_ts1_mean + window_size)[1]], na.rm = TRUE)
+ts2$r_amount[missing_indices_ts1_mean[2]] <- mean(ts2$r_amount[(missing_indices_ts1_mean - window_size)[2]:(missing_indices_ts1_mean + window_size)[2]], na.rm = TRUE)
+ts2$r_amount[missing_indices_ts1_mean[3]] <- mean(ts2$r_amount[(missing_indices_ts1_mean - window_size)[3]:(missing_indices_ts1_mean + window_size)[3]], na.rm = TRUE)
+
+print(ts2$r_amount[missing_indices_ts1_mean])
+
+# Impute for ts3 (using the same missing indices as ts1)
+ts3$r_amount[missing_indices_ts1_mean[1]] <- mean(ts3$r_amount[(missing_indices_ts1_mean - window_size)[1]:(missing_indices_ts1_mean + window_size)[1]], na.rm = TRUE)
+ts3$r_amount[missing_indices_ts1_mean[2]] <- mean(ts3$r_amount[(missing_indices_ts1_mean - window_size)[2]:(missing_indices_ts1_mean + window_size)[2]], na.rm = TRUE)
+ts3$r_amount[missing_indices_ts1_mean[3]] <- mean(ts3$r_amount[(missing_indices_ts1_mean - window_size)[3]:(missing_indices_ts1_mean + window_size)[3]], na.rm = TRUE)
+
+print(ts3$r_amount[missing_indices_ts1_mean])
+
+# Impute for ts4 (using the same missing indices as ts1)
+ts4$r_amount[missing_indices_ts1_mean[1]] <- mean(ts4$r_amount[(missing_indices_ts1_mean - window_size)[1]:(missing_indices_ts1_mean + window_size)[1]], na.rm = TRUE)
+ts4$r_amount[missing_indices_ts1_mean[2]] <- mean(ts4$r_amount[(missing_indices_ts1_mean - window_size)[2]:(missing_indices_ts1_mean + window_size)[2]], na.rm = TRUE)
+ts4$r_amount[missing_indices_ts1_mean[3]] <- mean(ts4$r_amount[(missing_indices_ts1_mean - window_size)[3]:(missing_indices_ts1_mean + window_size)[3]], na.rm = TRUE)
+
+print(ts4$r_amount[missing_indices_ts1_mean])
+
+```
+## Generalized Extreme Value: block maxima approach.
+In order to fit a gev model, we first need to search an appropriate time window using block maxima. The goal here is to divide the time series into sequences of some length n and pick the maxima of each block, controlling for uncorrelation. Therefore a key role is played by the length of the blocks: it must be large enough so that the maxima are uncorrelated (in order for the Fisher-Tippet-Gnedenko Theorem to be applied) but small enough so that we end up with a reasonable amount of data points. Hence, if we can meet the assumptions that all data points come from the same population with unknown density function and that all the values are taken independently, then we can estimate a model for our data and by FTG theorem the distribution of the maxima converge to one of the three probability distributions: Gumbel, Fréchet and Weibull.
+```{r}
+data1 <- ts1 %>%
+  mutate(
+    year = year(date),
+    month = month(date),
+    quarter = ceiling(month / 6) 
+  )
+gev_data1 <- data1 %>%
+  group_by(year, quarter) %>%
+  summarize(
+    start_date = min(date),
+    end_date = max(date),
+    max_rainfall = max(r_amount, na.rm = TRUE), 
+    .groups = "drop"
+  )
+print(gev_data1)
+acf(gev_data1$max_rainfall)
+plot(gev_data1$max_rainfall, type = "b")
+```
+The choice of the length of the time window has been preformed by looking at plot of the autocorrelation function: after trying with 3 and 4 months time window, the first plot where auotocorrelation was not present in the data has been found with a 6 months time window.
+In order to apply the same code to each series, a function has been built
+```{r}
+# Function to compute the block maxima for a given time series
+compute_maxima <- function(ts_data, station_name) {
+  data <- ts_data %>%
+    mutate(year = year(date), month = month(date), quarter = ceiling(month / 6))
+  
+  maxima_data <- data %>%
+    group_by(year, quarter) %>%
+    summarize(max_rainfall = max(r_amount, na.rm = TRUE), .groups = "drop")
+
+  return(maxima_data)
+}
+
+maxima_ts1 <- compute_maxima(ts1, "T4219")
+maxima_ts2 <- compute_maxima(ts2, "T4220")
+maxima_ts3 <- compute_maxima(ts3, "T4237")
+maxima_ts4 <- compute_maxima(ts4, "T4238")
+```
+
+At this point we can fit the GEV model for each time series, plot some diagnostics, compute the 95% confidence intervals for the parameters, the return levels of order 100,200,500,1000 and their respective confidence intervals. 
+```{r}
+# Time Series 1: T4219
+GEV_ts1 <- fevd(maxima_ts1$max_rainfall, type = "GEV")
+summary(GEV_ts1)
+```
+
+
+```{r echo=FALSE}
+# Diagnostic plots for T4219
+par(mfrow = c(2, 2))
+plot(GEV_ts1, type = c("probprob"), main = "Probability Plot (T4219)")
+plot(GEV_ts1, type = c("qq"), main = "Q-Q Plot (T4219)")
+plot(GEV_ts1, type = c("density"), main = "Density Plot (T4219)")
+plot(GEV_ts1, type = c("rl"), main = "Return Level Plot (T4219)")
+```
+
+
+```{r}
+# 95% confidence intervals for GEV parameters (normal approximation)
+norm_cint_ts1 <- ci(GEV_ts1, alpha = 0.05, type = "parameter")
+print(norm_cint_ts1)
+```
+
+```{r}
+# Return levels with 95% confidence intervals
+ret_lev_ts1 <- return.level(GEV_ts1, return.period = c(100, 200, 500, 1000),
+                            do.ci = TRUE)
+ret_lev_ts1
+```
+
+
+```{r}
+# Time Series 2: T4220
+GEV_ts2 <- fevd(maxima_ts2$max_rainfall, type = "GEV")
+summary(GEV_ts2)
+```
+
+
+```{r echo=FALSE}
+# Diagnostic plots for T4220
+par(mfrow = c(2, 2))
+plot(GEV_ts2, type = c("probprob"), main = "Probability Plot (T4220)")
+plot(GEV_ts2, type = c("qq"), main = "Q-Q Plot (T4220)")
+plot(GEV_ts2, type = c("density"), main = "Density Plot (T4220)")
+plot(GEV_ts2, type = c("rl"), main = "Return Level Plot (T4220)")
+
+```
+
+
+```{r}
+norm_cint_ts2 <- ci(GEV_ts2, alpha = 0.05, type = "parameter")
+norm_cint_ts2
+```
+
+
+```{r}
+# Return levels with 95% confidence intervals
+ret_lev_ts2 <- return.level(GEV_ts2, return.period = c(100, 200, 500, 1000),
+                            do.ci = TRUE)
+ret_lev_ts2
+```
+
+
+```{r}
+# Time Series 3: T4237
+GEV_ts3 <- fevd(maxima_ts3$max_rainfall, type = "GEV")
+summary(GEV_ts3)
+```
+```{r}
+# Diagnostic plots for T4237
+par(mfrow = c(2, 2))
+plot(GEV_ts3, type = c("probprob"), main = "Probability Plot (T4237)")
+plot(GEV_ts3, type = c("qq"), main = "Q-Q Plot (T4237)")
+plot(GEV_ts3, type = c("density"), main = "Density Plot (T4237)")
+plot(GEV_ts3, type = c("rl"), main = "Return Level Plot (T4237)")
+```
+
+
+```{r}
+# 95% confidence intervals for GEV parameters (normal approximation)
+norm_cint_ts3 <- ci(GEV_ts3, alpha = 0.05, type = "parameter")
+norm_cint_ts3
+```
+
+```{r}
+# Return levels with 95% confidence intervals
+ret_lev_ts3 <- return.level(GEV_ts3, return.period = c(100, 200, 500, 1000),
+                            do.ci = TRUE)
+ret_lev_ts3
+```
+
+
+```{r}
+# Time Series 4: T4238
+GEV_ts4 <- fevd(maxima_ts4$max_rainfall, type = "GEV")
+summary(GEV_ts4)
+```
+
+
+```{r echo=FALSE}
+# Diagnostic plots for T4238
+par(mfrow = c(2, 2))
+plot(GEV_ts4, type = c("probprob"), main = "Probability Plot (T4238)")
+plot(GEV_ts4, type = c("qq"), main = "Q-Q Plot (T4238)")
+plot(GEV_ts4, type = c("density"), main = "Density Plot (T4238)")
+plot(GEV_ts4, type = c("rl"), main = "Return Level Plot (T4238)")
+```
+
+
+```{r}
+# 95% confidence intervals for GEV parameters (normal approximation)
+norm_cint_ts4 <- ci(GEV_ts4, alpha = 0.05, type = "parameter")
+norm_cint_ts4
+```
+
+
+```{r}
+# Return levels with 95% confidence intervals
+ret_lev_ts4 <- return.level(GEV_ts4, return.period = c(100, 200, 500, 1000),
+                            do.ci = TRUE)
+ret_lev_ts4
+
+```
+As we can see, the confidence intervals for the shape parameter of the models fitted to stations T4219, T4220 and T4238 include zero, which suggests to investigate on the possibility of modelling those time series using a Gumbel distribution, where the shape parameter is exactly equal to zero. 
+```{r}
+gum1<-fevd(maxima_ts1$max_rainfall, type="Gumbel")
+gum1
+#Return levels with 95% confidence intervals
+ret.lev2<-return.level(gum1, return.period=c
+                       (100,200,500,1000),do.ci=TRUE)
+```
+The AIC and BIC are both preferable with the Gumbel than with the GEV
+```{r echo=FALSE}
+model_comparison1 <- data.frame(
+  Model = c("GEV", "Gumbel"),
+  AIC = c(427.898 , 426.1775 ),
+  BIC = c(432.9646, 429.5553 )
+)
+
+# Print the table
+print(model_comparison1)
+```
+and we can also appreciate the reduction of the length of confidence intervals, both on parameters and on return levels.
+```{r}
+ret.lev2 # Gumbel CI
+ret_lev_ts1 # GEV CI
+```
+
+```{r echo=FALSE}
+# Diagnostic plots
+par(mfrow=c(2,2))
+plot(gum1, type=c("probprob"), main="Probability Plot")
+plot(gum1, type=c("qq"), main="Q-Q Plot")
+plot(gum1, type=c("density"), main="Density Plot")
+plot(gum1, type=c("rl"), main="Return level Plot")
+```
+
+In order to decide whether the GEV distribution fits better than the Gumbel we run a likelihood ratio test.
+From the p-value, we cannot reject the null hypothesis that the Gumbel is enough, hence for station T4219 the Gumbel distribution is better than GEV.
+```{r echo=FALSE}
+#Likelihood ratio test
+lr.test(gum1, GEV_ts1, alpha = 0.05) 
+```
+
+We can apply the same reasoning to the other two stations where the confidence interval for the shape parameter include the zero. Here's the results of the AIC, BIC and likelihood ratio test for station T4220 and T4238 respectively
+```{r include=FALSE}
+gum2<-fevd(maxima_ts2$max_rainfall, type="Gumbel")
+#Return levels with 95% confidence intervals
+ret.lev3<-return.level(gum2, return.period=c
+                       (100,200,500,1000),do.ci=TRUE)
+model_comparison2 <- data.frame(
+  Model = c("GEV", "Gumbel"),
+  AIC = c(404.3132  , 402.3465),
+  BIC = c(409.3798 , 405.7242)
+)
+```
+
+
+```{r echo=FALSE}
+# Print the table
+print(model_comparison2)
+lr.test(gum2, GEV_ts2, alpha = 0.05) 
+```
+```{r include=FALSE}
+gum3<-fevd(maxima_ts3$max_rainfall, type="Gumbel")
+#Return levels with 95% confidence intervals
+ret.lev4<-return.level(gum3, return.period=c
+                       (100,200,500,1000),do.ci=TRUE)
+model_comparison3 <- data.frame(
+  Model = c("GEV", "Gumbel"),
+  AIC = c(372.8995   , 386.0463 ),
+  BIC = c(377.9661  , 389.424 )
+)
+```
+
+
+```{r}
+# Print the table
+print(model_comparison3)
+lr.test(gum3, GEV_ts3, alpha = 0.05) 
+```
+
+For station T4220 the Gumbel distribution is enough to fit the data well. However, the same cannot be said for station T4238, where both the AIC and BIC values are lower for the GEV distribution, indicating the necessity of the shape parameter. This conclusion is further validated through a likelihood ratio test, which confirms that the GEV distribution offers a better fit for the rainfall data recorded at station T4238.
+
+
+For station T4237, the initial GEV fitting revealed that the 95% confidence interval (using the normal approximation) for the shape parameter included only positive values. However, the confidence intervals for the return levels were significantly wider compared to those of the other rainfall stations, therefore caution is needed in interpreting the estimates and drawing inferences.
+
+## Generalized Pareto Distribution: peak over threshold approach.
+To fit a Generalized Pareto Distribution (GPD), we employ the Peak Over Threshold (POT) method, which focuses on modeling the tail behavior of a distribution by using data points that exceed a chosen threshold. The goal is to select a threshold high enough to ensure that the excesses (values above the threshold) follow the GPD, as guaranteed by the Pickands-Balkema-de Haan Theorem.
+A critical aspect of this approach is the choice of the threshold: it must be sufficiently high to justify the GPD approximation while retaining enough data points to enable reliable parameter estimation. This balance is essential, as overly high thresholds reduce the sample size and increase estimation uncertainty, whereas low thresholds may violate the assumptions of the theorem.
+If the assumptions are satisfied — that is, the exceedances are independent and identically distributed and originate from the same population — then the excesses above the threshold can be modeled using the GPD. 
+
+
+Now, we are going to choose an appropriate threshold making use of mean excess plots (the sample mean of excesses when the value of the threshold u changes) and the "gpd.fitrange" function which fits the GPD model for different values of the threshold u. Then we are going to fit the final model, plot the diagnostics and compare it with the same model that includes a trend in the time component. The same steps are repated for all four rain stations.
+```{r}
+# TS1
+mrl.plot(ts1$r_amount)
+gpd.fitrange(ts1$r_amount, 0, 150, 50)
+```
+By looking at the second plot, it seems that after u = 100 the estimates of the shape and modified scale parameters become more unstable, therefore a value between 50 and 100 must be picked. In order to balance the trade-off between bias and variance, a threshold u = 50 has been chosen.
+
+```{r}
+gpd1 <- gpd.fit(ts1$r_amount, 50)
+#Number of excesses
+gpd1$nexc
+```
+
+
+```{r}
+# Plot diagnostics
+gpd.diag(gpd1)
+```
+
+We can also include a time trend and check whether this model better explains the evolution in time of the event under study.
+```{r include=FALSE}
+# Try including a trend on time in the model
+t1 <- matrix(1:length(ts1$r_amount), ncol = 1) / length(ts1$r_amount)
+gpd.t1 <- gpd.fit(ts1$r_amount, 50, ydat = t1, sigl = 1, siglink = exp)
+```
+
+After comparing the two models through a likelihood ratio test, there is no evidence to reject the null hypothesis, therefore the simpler model (without trend) is enough.
+```{r}
+# Compare the two models with likelihood ratio test
+lrt1 <- 2 * (gpd1$nllh - gpd.t1$nllh)
+print(1 - pchisq(lrt1, 1))
+```
+The following code develops the same arguments for the other three rain stations:
+```{r echo=FALSE}
+mrl.plot(ts2$r_amount) 
+gpd.fitrange(ts2$r_amount, 0, 130,50)
+```
+
+
+```{r}
+gpd2 <- gpd.fit(ts2$r_amount, 45)
+gpd2$nexc
+```
+
+
+```{r}
+# Plot diagnostics
+gpd.diag(gpd2)
+```
+
+
+```{r include=FALSE}
+# Try including a trend on time in the model
+t2 <- matrix(1:length(ts2$r_amount), ncol = 1) / length(ts2$r_amount)
+gpd.t2 <- gpd.fit(ts2$r_amount, 45, ydat = t2, sigl = 1, siglink = exp)
+```
+
+
+```{r}
+# Compare the two models with likelihood ratio test
+lrt2 <- 2 * (gpd2$nllh - gpd.t2$nllh)
+print(1 - pchisq(lrt2, 1))
+```
+Again, no evidence to reject the null hypothesis. The simpler model is again better.
+
+
+For the station T4237 it seems that a reasonable threshold should be between 40 and 50 Let's pick u = 40
+```{r}
+mrl.plot(ts3$r_amount)
+gpd.fitrange(ts3$r_amount, 0, 130, 50)
+```
+
+```{r}
+gpd3 <- gpd.fit(ts3$r_amount, 40)
+gpd3$nexc
+```
+
+
+```{r}
+# Plot diagnostics
+gpd.diag(gpd3)
+```
+
+Once again the simpler model is preferred.
+```{r include=FALSE}
+# Try including a trend on time in the model
+t3 <- matrix(1:length(ts3$r_amount), ncol = 1) / length(ts3$r_amount)
+gpd.t3 <- gpd.fit(ts3$r_amount, 40, ydat = t3, sigl = 1, siglink = exp)
+```
+
+
+```{r}
+# Compare the two models with likelihood ratio test
+lrt3 <- 2 * (gpd3$nllh - gpd.t3$nllh)
+print(1 - pchisq(lrt3, 1))
+
+```
+Here's the model for station T4238, where a good value of u lies between 50 and 70. 
+```{r}
+mrl.plot(ts4$r_amount)
+gpd.fitrange(ts4$r_amount, 0, 130,50)
+```
+
+```{r}
+gpd4 <- gpd.fit(ts4$r_amount, 50) 
+gpd4$nexc
+```
+
+
+```{r}
+# Plot diagnostics
+gpd.diag(gpd4)
+```
+
+
+```{r include=FALSE}
+# Try including a trend on time in the model
+t4 <- matrix(1:length(ts4$r_amount), ncol = 1) / length(ts4$r_amount)
+gpd.t4 <- gpd.fit(ts4$r_amount, 50, ydat = t4, sigl = 1, siglink = exp)
+```
+
+Given the high p-value, once again the simpler model is preferred.
+```{r}
+# Compare the two models with likelihood ratio test
+lrt4 <- 2 * (gpd4$nllh - gpd.t4$nllh)
+print(1 - pchisq(lrt4, 1))
+
+```
+```{r include=FALSE}
+gpd11 <- fevd(ts1$r_amount, type = "GP", threshold = 50)
+r11 <- return.level(gpd11, return.period = c(100, 200, 500, 1000), do.ci = TRUE)
+gpd22 <- fevd(ts2$r_amount, type = "GP", threshold = 45)
+r22 <- return.level(gpd22, return.period = c(100, 200, 500, 1000), do.ci = TRUE)
+gpd33 <- fevd(ts3$r_amount, type = "GP", threshold = 40)
+r33 <- return.level(gpd33, return.period = c(100, 200, 500, 1000), do.ci = TRUE)
+gpd44 <- fevd(ts4$r_amount, type = "GP", threshold = 50)
+r44<- return.level(gpd44, return.period = c(100, 200, 500, 1000), do.ci = TRUE)
+```
+
+```{r echo=FALSE}
+tab1 <- data.frame(
+  Return_Period = c(100, 200, 500, 1000),
+  Lower_CI = c(140.79743, 123.77652, 88.36747, 50.76056),
+  Estimate = c(312.6856, 350.8105, 404.3456, 447.3568),
+  Upper_CI = c(484.5738, 577.8445, 720.3238, 843.9530)
+)
+
+# Print the table
+print(tab1)
+```
+
+```{r echo=FALSE}
+tab2 <- data.frame(
+  Return_Period = c(100, 200, 500, 1000),
+  Lower_CI = c(119.25720, 113.42401, 99.87970, 85.00564),
+  Estimate = c(212.3463, 233.7965, 262.9736, 285.6838),
+  Upper_CI = c(305.4355, 354.1690, 426.0674, 486.3619)
+)
+
+# Print the table
+print(tab2)
+```
+```{r echo=FALSE}
+tab3 <- data.frame(
+  Return_Period = c(100, 200, 500, 1000),
+  Lower_CI = c(46.46933 , -24.88880 , -194.64043 , -408.18210),
+  Estimate = c(406.8781, 520.7524,721.3094,922.6846 ),
+  Upper_CI = c(767.2869, 1066.3936, 1637.2593, 2253.5512)
+)
+
+# Print the table
+print(tab3)
+```
+```{r echo=FALSE}
+tab4 <- data.frame(
+  Return_Period = c(100, 200, 500, 1000),
+  Lower_CI = c(178.5385, 169.6394, 146.1060, 118.4257),
+  Estimate = c(344.5261, 387.7388, 448.3983, 497.1174),
+  Upper_CI = c(510.5138, 605.8381, 750.6906, 875.8091)
+)
+
+# Print the table
+print(tab4)
+```
+For station T4237, as we can see from the confidence intervals of return level estimates, the uncertainty is so high that the lower bounds of the intervals become negative. Therefore we cannot say anything about the interpretation of these estimates. We previously got the same result from GEV estimation.
+
+As one would expect by modelling beyond the observed data range, for all stations the return levels increase as the return period increases and the confidence intervals become wider with increasing return periods, reflecting more uncertainty in the estimates of more extreme events. 
+Focusing only on stations T4219, T4220 and T4238, we can see that station T4238 seems to have the highest return levels, indicating it is the most prone to extreme rainfall events. Regarding uncertainty, station T4220 has the narrowest confidence intervals, suggesting a more reliable model fit.
+
+
+Finally, when comparing the confidence intervals for return levels produced by the GEV (or Gumbel) model and the GPD model across all four stations, it is evident that the Gumbel model provides narrower intervals but at the cost of potentially underestimating extreme rainfall events. In contrast, the GPD model predicts higher rainfall extremes, albeit with wider confidence intervals, reflecting greater uncertainty.
